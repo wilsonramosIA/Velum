@@ -1,0 +1,299 @@
+# VELUM: Bayesian Filtering with Data-Driven Calibration
+
+This document presents the pseudo-code for the VELUM inference procedure.
+
+The full production implementation is proprietary and cannot be publicly released. This pseudo-code describes the scientific and algorithmic structure of the method, including prior initialization, data-driven calibration, prediction, Bayesian update, and extraction of operational outputs.
+
+---
+
+## Inputs
+
+Let the input time series be:
+
+```text
+{S_t, R_t, L_t, C_t, p_t^so}_{t=1}^T
+```
+
+where:
+
+| Symbol   | Description                                            |
+| -------- | ------------------------------------------------------ |
+| `S_t`    | Observed sales at day `t`                              |
+| `R_t`    | Registered receipts at day `t`                         |
+| `L_t`    | Aggregate losses/waste/negative adjustments at day `t` |
+| `C_t`    | Sparse physical count at day `t`, when available       |
+| `p_t^so` | Operational stockout probability at day `t`            |
+
+The state grid is:
+
+```text
+A = linspace(0, A_max, N)
+```
+
+where:
+
+| Symbol  | Description                      |
+| ------- | -------------------------------- |
+| `A`     | Discrete latent stock state grid |
+| `A_max` | Maximum stock support            |
+| `N`     | Number of discrete states        |
+
+---
+
+## Outputs
+
+The algorithm returns:
+
+| Output            | Description                                      |
+| ----------------- | ------------------------------------------------ |
+| `A_prior[1:T]`    | Prior median estimates before evidence update    |
+| `A_post[1:T]`     | Posterior median estimates after evidence update |
+| `P_stockout[1:T]` | Posterior rupture/stockout probabilities         |
+
+---
+
+## Pseudo-Code
+
+```text
+Algorithm: VELUM Bayesian Filtering with Data-Driven Calibration
+
+Input:
+    Time series {S_t, R_t, L_t, C_t, p_t^so}_{t=1}^T
+    State grid A = linspace(0, A_max, N)
+    Operational thresholds
+
+Output:
+    Prior medians A_prior[1:T]
+    Posterior medians A_post[1:T]
+    Rupture probabilities P(A_t = 0 | Y_1:t)
+
+------------------------------------------------------------
+Phase 1: Prior Initialization
+------------------------------------------------------------
+
+1. Select all positive training counts:
+
+       positive_counts = {C_t : C_t > 0}
+
+2. Estimate the mean and variance of positive counts:
+
+       m_hat = mean(positive_counts)
+       v_hat = variance(positive_counts)
+
+3. Set Gamma prior parameters:
+
+       k     = (m_hat^2) / v_hat
+       theta = v_hat / m_hat
+
+4. For each state a in A, evaluate the initial log-belief:
+
+       log_b_0(a) = log GammaPDF(a; k, theta)
+
+5. Normalize log_b_0 over the state grid A.
+
+------------------------------------------------------------
+Phase 2: Data-Driven Calibration
+------------------------------------------------------------
+
+6. Compute accumulated receipts up to the last training count:
+
+       E = sum(receipts up to last training count)
+
+7. Compute accumulated outflows up to the last training count:
+
+       S_out = sum(sales + losses up to last training count)
+
+8. Compute the absolute imbalance gap:
+
+       gap = |E - S_out|
+
+9. Compute the imbalance ratio:
+
+       rho = gap / max(E, S_out)
+
+10. Interpolate transition parameters from rho:
+
+       sigma_T, sigma_R = interpolate_sigmas(rho)
+
+    Apply low-flow safeguards when movement is too small or unstable.
+
+11. Define a calibration grid G for alpha and phi:
+
+       G = {(alpha, phi)}
+
+12. For each candidate pair (alpha, phi) in G:
+
+       a. Run the one-step-ahead prior prediction on training count dates.
+       b. Compare the prior median against the physical count C_t.
+       c. Compute training RMSE.
+
+13. Select the candidate pair that minimizes training RMSE:
+
+       alpha_star, phi_star = argmin RMSE_prior(alpha, phi)
+
+------------------------------------------------------------
+Phase 3: Recursive Filtering
+------------------------------------------------------------
+
+14. For each day t from 1 to T:
+
+       -----------------------------------------------------
+       Predict Step
+       -----------------------------------------------------
+
+       14.1 For each previous state i in A:
+
+             Compute the transition mean:
+
+                 mu_t_given_t_minus_1(i) =
+                     i - S_{t-1} - L_{t-1} + R_{t-1}
+
+             Compute total outflow:
+
+                 T_flow_t = S_{t-1} + L_{t-1}
+
+             Compute transition scale:
+
+                 omega_t =
+                     sqrt((sigma_R * R_{t-1})^2 +
+                          (sigma_T * T_flow_t)^2)
+
+             Compute skewness eta_t using alpha_star,
+             omega_t, T_flow_t, and low-flow protection.
+
+       14.2 Build the transition matrix:
+
+             log_T_t(i, a) =
+                 log SkewNormalPDF(
+                     a;
+                     location = mu_t_given_t_minus_1(i),
+                     scale    = omega_t,
+                     shape    = eta_t
+                 )
+
+             for all previous states i and current states a.
+
+       14.3 Propagate the previous posterior belief:
+
+             log_b_minus_t(a) =
+                 logsumexp_i [
+                     log_b_{t-1}(i) + log_T_t(i, a)
+                 ]
+
+       14.4 Normalize log_b_minus_t over the state grid A.
+
+       14.5 Extract the prior median:
+
+             A_prior[t] = median(log_b_minus_t)
+
+       -----------------------------------------------------
+       Update Step
+       -----------------------------------------------------
+
+       14.6 For each current state a in A:
+
+             Compute censored sales emission mean:
+
+                 m_S = min(mu_t, a)
+
+             Compute sales emission standard deviation:
+
+                 s_S = phi_star * sqrt(max(m_S, 1))
+
+             Compute sales likelihood:
+
+                 ell_S(a) = log NormalPDF(S_t; m_S, s_S^2)
+
+       14.7 If a physical count C_t exists:
+
+             ell_C(a) = log NormalPDF(C_t; a, sigma_C_t^2)
+
+           Otherwise:
+
+             ell_C(a) = 0
+
+       14.8 If p_t^so exceeds the operational threshold:
+
+             Compute soft stockout evidence:
+
+                 ell_so_t(a) = soft_stockout_penalty(a)
+
+           Otherwise:
+
+             ell_so_t(a) = 0
+
+       14.9 Fuse prior belief and evidence:
+
+             log_b_tilde_t(a) =
+                 log_b_minus_t(a)
+                 + ell_S(a)
+                 + ell_C(a)
+                 + ell_so_t(a)
+
+       14.10 Normalize log_b_tilde_t to obtain posterior belief:
+
+             log_b_t(a) = normalize(log_b_tilde_t(a))
+
+       14.11 Extract the posterior median:
+
+             A_post[t] = median(log_b_t)
+
+       14.12 Extract posterior rupture probability:
+
+             P_stockout[t] = P(A_t = 0 | Y_1:t)
+                            = b_t(0)
+
+15. Return:
+
+       A_prior[1:T]
+       A_post[1:T]
+       P_stockout[1:T]
+```
+
+---
+
+## Notes on the Prediction Step
+
+The transition mean follows the inventory balance equation:
+
+```text
+mu_t|t-1(i) = i - S_{t-1} - L_{t-1} + R_{t-1}
+```
+
+This equation propagates the previous latent stock state through observed operational flows.
+
+The transition scale is heteroscedastic:
+
+```text
+omega_t = sqrt((sigma_R R_{t-1})^2 + (sigma_T T_flow_t)^2)
+```
+
+where:
+
+```text
+T_flow_t = S_{t-1} + L_{t-1}
+```
+
+This allows uncertainty to grow with operational movement volume.
+
+---
+
+## Notes on the Update Step
+
+The sales emission is censored by the latent stock state:
+
+```text
+m_S(t, a) = min(mu_t, a)
+```
+
+This encodes the physical constraint that observed sales cannot exceed available stock.
+
+The stockout probability signal is treated as soft evidence. It is not interpreted as a direct observation that inventory is zero.
+
+---
+
+## Proprietary Implementation Notice
+
+This pseudo-code is provided for academic inspection and independent reimplementation.
+
+The production implementation of VELUM is company property and is not included in this repository. Proprietary components such as internal data access layers, deployment infrastructure, business-specific rules, and production optimizations are intentionally omitted.
