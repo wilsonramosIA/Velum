@@ -1,0 +1,196 @@
+# Data Availability
+
+This document describes the availability, access instructions, schema, and usage conditions for the dataset associated with the paper:
+
+**VELUM: Recovering Latent Inventory from Censored Demand and Imperfect Signals in Production Retail Systems**
+
+The released dataset is named:
+
+**Retail-IRI-1K**
+
+Retail-IRI-1K is an anonymized retail inventory benchmark for inventory record inaccuracy research. It contains 1,000 store-product time series derived from a real retail operation and was used to evaluate VELUM and the compared baselines reported in the paper.
+
+---
+
+## Dataset Access
+
+The full dataset is not stored directly in this GitHub repository because the CSV file exceeds GitHub's practical file-size limit.
+
+The dataset can be downloaded from Google Drive:
+
+```text
+https://drive.google.com/file/d/1haE7wz7bmVVeCNHSi5EYChgavOuveB1W/view?usp=drive_link
+```
+---
+
+## Dataset Name
+
+The dataset released with this paper is:
+
+```text
+Retail-IRI-1K
+```
+
+The name reflects the focus of the benchmark:
+
+* **Retail**: the dataset comes from retail inventory operations;
+* **IRI**: inventory record inaccuracy;
+* **1K**: the benchmark contains 1,000 store-product time series.
+
+---
+
+## Dataset Description
+
+Retail-IRI-1K contains daily time series for store-product groups. Each row represents a daily observation for a specific customer, store, and product group.
+
+The dataset includes transactional inventory flows, physical count observations, ERP stock records, and operational stockout probability signals.
+
+The CSV file contains the following columns:
+
+| Column                     | Description                                                                                                                              |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `customer`                 | Identifier of the customer or business unit. This field is desensitized for public release.                                              |
+| `store_id`                 | Identifier of the store. Store identifiers are anonymized or remapped.                                                                   |
+| `group_id`                 | Identifier of the product group or store-product series. Product identifiers are anonymized or remapped.                                 |
+| `transaction_date`         | Date of the inventory transaction or daily record. Dates may be shifted or transformed for confidentiality.                              |
+| `sales`                    | Number of units sold on the given date. Sales are observed but may be censored by stockout.                                              |
+| `receipts`                 | Number of units received into inventory on the given date.                                                                               |
+| `waste`                    | Units lost due to waste, shrinkage, damage, or other negative inventory events.                                                          |
+| `transformations`          | Inventory transformations or adjustments, such as internal reprocessing, write-offs, or conversion events.                               |
+| `counted_stock`            | Physical stock count observed during sparse inventory audits. This is the main ground-truth signal when available.                       |
+| `current_stock`            | ERP-Prod book stock or deterministic accounting inventory record. This corresponds to the production inventory balance used as baseline. |
+| `eod_stockout_probability` | End-of-day operational stockout probability or alert score. This is used as soft evidence, not as a direct physical count.               |
+| `soma_entradas_grupo`      | Aggregated inflow volume for the group.                                                                                                  |
+| `soma_saidas_grupo`        | Aggregated outflow volume for the group.                                                                                                 |
+| `movimentacao_total_grupo` | Total movement volume for the group, combining inflows and outflows.                                                                     |
+
+---
+
+## Notes on Ground Truth
+
+The column `counted_stock` is sparse. It is only available on physical count dates and is used as the main ground-truth signal for evaluation.
+
+Daily model estimates are generated throughout the time series, but MAE and RMSE are computed only when physical count information is available.
+
+The column `current_stock` represents the ERP-Prod accounting stock and is used as the deterministic operational baseline.
+
+The column `eod_stockout_probability` is treated as soft operational evidence. It should not be interpreted as a physical count of zero inventory.
+
+---
+
+## Anonymization and Desensitization
+
+The original data comes from a real retail environment and contains commercially sensitive information. Before release, the dataset was desensitized to reduce the risk of exposing confidential business information.
+
+The desensitization process may include:
+
+1. remapping store identifiers;
+2. remapping product or group identifiers;
+3. removing direct commercial identifiers;
+4. transforming or shifting dates;
+5. aggregating sensitive product-level information into groups;
+6. preserving the temporal structure required for inventory inference;
+7. preserving the statistical behavior required for reproducing the experiments.
+
+The goal is to support reproducible academic research while protecting the confidentiality of the industrial partner and its retail operations.
+
+---
+
+## Why the Dataset Is Hosted Externally
+
+The full dataset is hosted externally because the CSV file is larger than 100 MB, which makes direct storage in GitHub impractical.
+
+The GitHub repository contains the reproducibility package, including:
+
+* pseudo-code;
+* dataset documentation;
+* dataset schema;
+* model documentation;
+* evaluation protocol.
+
+The full dataset is provided through the Google Drive link above.
+
+---
+
+## Reproducibility Scope
+
+The full production implementation of VELUM is proprietary and cannot be publicly released. It is integrated into an industrial production system and includes company-specific engineering components, internal data access layers, operational rules, and deployment infrastructure.
+
+To support reproducibility, this repository provides:
+
+* the anonymized Retail-IRI-1K dataset;
+* the complete dataset schema;
+* detailed pseudo-code for the VELUM inference procedure;
+* documentation of the transition model;
+* documentation of the censored-demand emission model;
+* documentation of the soft stockout evidence mechanism;
+* calibration details;
+* the evaluation protocol used in the paper.
+
+This release is intended to allow reviewers and researchers to inspect the dataset and independently reimplement the scientific method without exposing proprietary company code.
+
+---
+
+## Pseudo-Code Availability
+
+The full production code is not released because it is company property.
+
+Instead, the repository provides pseudo-code that describes the scientific and algorithmic structure of VELUM, including:
+
+* prior initialization;
+* transition construction;
+* adaptive uncertainty calibration;
+* censored sales emission;
+* physical count likelihood;
+* soft stockout evidence;
+* Bayesian update;
+* posterior normalization;
+* extraction of prior and posterior medians;
+* uncertainty interval computation;
+* evaluation on sparse physical count dates.
+
+The pseudo-code is intended to be sufficient for an independent academic reimplementation of the method.
+
+---
+
+## Usage Conditions
+
+Retail-IRI-1K is released for academic research and reproducibility purposes.
+
+Users of the dataset should not attempt to:
+
+* identify the original stores;
+* identify the original products;
+* infer confidential commercial operations;
+* reverse engineer the industrial partner's internal systems;
+* use the dataset for commercial benchmarking without permission.
+
+The dataset should be used only in ways consistent with academic research, reproducibility, and responsible data handling.
+
+---
+
+## Recommended Citation
+
+If you use Retail-IRI-1K or the associated reproducibility package, please cite:
+
+```bibtex
+@inproceedings{ramosfilho2026velum,
+  title     = {VELUM: Recovering Latent Inventory from Censored Demand and Imperfect Signals in Production Retail Systems},
+  author    = {Ramos Filho, Wilson M. and Ruiz, Andr\\'e Arroyo and Aikes Junior, Jorge and Barros, Davi Bezerra},
+  booktitle = {Proceedings of the IEEE International Conference on Data Mining},
+  year      = {2026}
+}
+```
+
+The final citation may be updated after publication.
+
+---
+
+## Contact
+
+For questions about the dataset or reproducibility package, please contact:
+
+Wilson M. Ramos Filho
+Federal University of Goiás
+Goiânia, Brazil
+Email: [wilson_ramos@discente.ufg.br](mailto:wilson_ramos@discente.ufg.br)
